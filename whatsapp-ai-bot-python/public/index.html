@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>WhatsApp AI Bot Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<style>
+  :root{
+    --wa-green:#075E54;
+    --wa-green-light:#25D366;
+    --wa-panel:#111b21;
+    --wa-panel-2:#202c33;
+    --wa-bg:#0b141a;
+    --wa-bubble-in:#202c33;
+    --wa-bubble-out:#005c4b;
+    --text:#e9edef;
+    --text-dim:#8696a0;
+    --border:#2a3942;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--wa-bg);
+    color:var(--text);
+    height:100vh;
+    overflow:hidden;
+  }
+  #app{display:flex;height:100vh;}
+
+  /* ---------- Left: accounts rail ---------- */
+  #accountsRail{
+    width:84px;
+    background:var(--wa-panel);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:center;
+    padding:16px 0;gap:10px;overflow-y:auto;
+  }
+  .rail-btn{
+    width:56px;height:56px;border-radius:16px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--wa-panel-2);color:var(--text-dim);
+    font-weight:600;font-size:13px;cursor:pointer;
+    border:2px solid transparent;position:relative;flex-shrink:0;
+    transition:.15s;
+  }
+  .rail-btn:hover{background:#2a3942;}
+  .rail-btn.active{border-color:var(--wa-green-light);color:var(--text);}
+  .rail-btn .dot{
+    position:absolute;bottom:-3px;right:-3px;width:12px;height:12px;border-radius:50%;
+    border:2px solid var(--wa-panel);
+  }
+  .dot.connected{background:var(--wa-green-light);}
+  .dot.pending_qr{background:#f0ad4e;}
+  .dot.disconnected{background:#e74c3c;}
+  .rail-btn .remove-btn{
+    position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+    background:#e74c3c;color:#fff;font-size:12px;line-height:18px;text-align:center;
+    display:none;cursor:pointer;font-weight:700;
+  }
+  .rail-btn:hover .remove-btn{display:block;}
+  #addAccountBtn{
+    width:56px;height:56px;border-radius:16px;
+    background:transparent;border:2px dashed var(--text-dim);
+    color:var(--text-dim);font-size:28px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  #addAccountBtn:hover{border-color:var(--wa-green-light);color:var(--wa-green-light);}
+
+  /* ---------- Middle: contact list ---------- */
+  #contactPanel{
+    width:320px;background:var(--wa-panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+  }
+  #contactPanel .header{
+    padding:16px;font-weight:600;border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  #contactPanel .header small{color:var(--text-dim);font-weight:400;}
+  .contact-item{
+    padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .contact-item:hover{background:var(--wa-panel-2);}
+  .contact-item.active{background:var(--wa-panel-2);}
+  .contact-item .name{font-weight:600;font-size:14px;}
+  .contact-item .sub{font-size:12px;color:var(--text-dim);}
+  #contactList{overflow-y:auto;flex:1;}
+  .empty-hint{padding:24px 16px;color:var(--text-dim);font-size:13px;}
+
+  /* ---------- Right: chat window ---------- */
+  #chatPanel{flex:1;display:flex;flex-direction:column;}
+  #chatHeader{
+    padding:14px 20px;background:var(--wa-panel-2);border-bottom:1px solid var(--border);
+    font-weight:600;
+  }
+  #chatHeader small{display:block;color:var(--text-dim);font-weight:400;font-size:12px;margin-top:2px;}
+  #messages{
+    flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:8px;
+    background-image:radial-gradient(circle at 25px 25px, rgba(255,255,255,0.02) 2%, transparent 0%);
+    background-size:50px 50px;
+  }
+  .bubble{max-width:60%;padding:8px 12px;border-radius:8px;font-size:14px;line-height:1.4;position:relative;}
+  .bubble.in{align-self:flex-start;background:var(--wa-bubble-in);}
+  .bubble.out{align-self:flex-end;background:var(--wa-bubble-out);}
+  .bubble .tag{font-size:10px;color:var(--text-dim);margin-top:4px;display:block;}
+  #chatEmpty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-dim);}
+
+  /* ---------- QR modal ---------- */
+  #qrModal{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
+    align-items:center;justify-content:center;z-index:50;
+  }
+  #qrModal.show{display:flex;}
+  #qrCard{
+    background:var(--wa-panel-2);padding:32px;border-radius:12px;text-align:center;width:320px;
+  }
+  #qrCard h3{margin-top:0;}
+  #qrCard img{width:220px;height:220px;background:#fff;border-radius:8px;padding:8px;}
+  #qrCard .status{margin-top:14px;color:var(--text-dim);font-size:13px;}
+  #qrCard button{
+    margin-top:16px;background:transparent;border:1px solid var(--border);color:var(--text-dim);
+    padding:8px 16px;border-radius:8px;cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Left rail: All + each linked account + add(+) -->
+  <div id="accountsRail">
+    <div class="rail-btn active" id="allBtn" title="All accounts">All</div>
+    <div id="accountsList"></div>
+    <div id="addAccountBtn" title="Link a new WhatsApp number">+</div>
+  </div>
+
+  <!-- Middle: contact list for the selected account (or all) -->
+  <div id="contactPanel">
+    <div class="header">
+      <span id="contactPanelTitle">All conversations</span>
+    </div>
+    <div id="contactList"><div class="empty-hint">No conversations yet.</div></div>
+  </div>
+
+  <!-- Right: chat window -->
+  <div id="chatPanel">
+    <div id="chatEmpty">Select a conversation to view messages</div>
+    <div id="chatHeader" style="display:none;"></div>
+    <div id="messages" style="display:none;"></div>
+  </div>
+
+</div>
+
+<!-- QR link modal -->
+<div id="qrModal">
+  <div id="qrCard">
+    <h3>Link WhatsApp Number</h3>
+    <img id="qrImg" src="" alt="QR code" />
+    <div class="status" id="qrStatus">Open WhatsApp → Linked Devices → Link a Device</div>
+    <button id="qrCloseBtn">Close</button>
+  </div>
+</div>
+
+<script>
+const socket = io();
+
+let accounts = [];        // [{id, phone_number, name, status}]
+let currentView = 'all';  // 'all' or accountId
+let currentContactId = null;
+let currentContactJid = null;
+let pendingAccountId = null;
+
+// ---------- API helpers ----------
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  return res.json();
+}
+
+// ---------- Accounts rail ----------
+function renderAccounts() {
+  const list = document.getElementById('accountsList');
+  list.innerHTML = '';
+  accounts.forEach(acc => {
+    const btn = document.createElement('div');
+    btn.className = 'rail-btn' + (currentView === acc.id ? ' active' : '');
+    btn.title = acc.phone_number || 'Connecting...';
+    btn.textContent = acc.phone_number ? acc.phone_number.slice(-4) : '…';
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + acc.status;
+    btn.appendChild(dot);
+
+    const removeBtn = document.createElement('div');
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.title = 'Unlink this WhatsApp number';
+    removeBtn.onclick = (e) => {
+      e.stopPropagation(); // don't trigger selectView
+      const label = acc.phone_number || 'this account';
+      if (!confirm(`Unlink ${label}? This removes it from WhatsApp Linked Devices and deletes its chat history from this dashboard.`)) return;
+      api(`/api/accounts/${acc.id}`, { method: 'DELETE' }).then(() => {
+        if (currentView === acc.id) selectView('all');
+        loadAccounts();
+      });
+    };
+    btn.appendChild(removeBtn);
+
+    btn.onclick = () => selectView(acc.id);
+    list.appendChild(btn);
+  });
+}
+
+async function loadAccounts() {
+  accounts = await api('/api/accounts');
+  renderAccounts();
+}
+
+// ---------- View switching (All vs one account) ----------
+function selectView(view) {
+  currentView = view;
+  document.getElementById('allBtn').classList.toggle('active', view === 'all');
+  renderAccounts();
+  loadContacts();
+  clearChat();
+}
+
+document.getElementById('allBtn').onclick = () => selectView('all');
+
+// ---------- Contact list ----------
+async function loadContacts() {
+  const titleEl = document.getElementById('contactPanelTitle');
+  const listEl = document.getElementById('contactList');
+  let contacts;
+
+  if (currentView === 'all') {
+    titleEl.textContent = 'All conversations';
+    contacts = await api('/api/contacts/all');
+  } else {
+    const acc = accounts.find(a => a.id === currentView);
+    titleEl.textContent = acc?.phone_number || 'Conversations';
+    contacts = await api(`/api/accounts/${currentView}/contacts`);
+  }
+
+  listEl.innerHTML = '';
+  if (!contacts.length) {
+    listEl.innerHTML = '<div class="empty-hint">No conversations yet.</div>';
+    return;
+  }
+
+  contacts.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'contact-item' + (currentContactId === c.id ? ' active' : '');
+    const sub = currentView === 'all' ? (c.phone_number || c.account_id) : c.jid.split('@')[0];
+    item.innerHTML = `<span class="name">${c.name || c.jid.split('@')[0]}</span><span class="sub">${sub}</span>`;
+    item.onclick = () => openChat(c.id, c.jid, c.name || c.jid.split('@')[0]);
+    listEl.appendChild(item);
+  });
+}
+
+// ---------- Chat window ----------
+function clearChat() {
+  currentContactId = null;
+  document.getElementById('chatEmpty').style.display = 'flex';
+  document.getElementById('chatHeader').style.display = 'none';
+  document.getElementById('messages').style.display = 'none';
+}
+
+async function openChat(contactId, jid, name) {
+  currentContactId = contactId;
+  currentContactJid = jid;
+  loadContacts(); // refresh active highlight
+
+  document.getElementById('chatEmpty').style.display = 'none';
+  const header = document.getElementById('chatHeader');
+  header.style.display = 'block';
+  header.innerHTML = `${name}<small>${jid}</small>`;
+
+  const msgs = await api(`/api/contacts/${contactId}/messages`);
+  const box = document.getElementById('messages');
+  box.style.display = 'flex';
+  box.innerHTML = '';
+  msgs.forEach(renderMessage);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderMessage(m) {
+  const box = document.getElementById('messages');
+  const b = document.createElement('div');
+  b.className = 'bubble ' + m.direction;
+  b.innerHTML = m.body + (m.ai_generated ? '<span class="tag">AI reply</span>' : '');
+  box.appendChild(b);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---------- Add account (+) / QR modal ----------
+const qrModal = document.getElementById('qrModal');
+document.getElementById('addAccountBtn').onclick = async () => {
+  qrModal.classList.add('show');
+  document.getElementById('qrImg').src = '';
+  document.getElementById('qrStatus').textContent = 'Generating QR code…';
+  const { accountId } = await api('/api/accounts', { method: 'POST' });
+  pendingAccountId = accountId;
+  subscribeAccountEvents(accountId);
+
+  socket.on(`qr:${accountId}`, ({ dataUrl }) => {
+    document.getElementById('qrImg').src = dataUrl;
+    document.getElementById('qrStatus').textContent = 'Scan with WhatsApp → Linked Devices';
+  });
+  socket.on(`status:${accountId}`, ({ status, phone }) => {
+    if (status === 'connected') {
+      document.getElementById('qrStatus').textContent = `Connected as ${phone}`;
+      setTimeout(() => qrModal.classList.remove('show'), 1200);
+      loadAccounts();
+    }
+  });
+};
+document.getElementById('qrCloseBtn').onclick = () => qrModal.classList.remove('show');
+
+// ---------- Live updates ----------
+socket.on('accounts:updated', loadAccounts);
+
+// Subscribe to message events for every known account so the open chat
+// (or the All view's contact list) updates live. Tracked in a Set so we
+// never bind the same accountId twice across repeated loadAccounts() calls.
+const subscribedAccounts = new Set();
+function subscribeAccountEvents(accountId) {
+  if (subscribedAccounts.has(accountId)) return;
+  subscribedAccounts.add(accountId);
+  socket.on(`message:${accountId}`, (m) => {
+    if (currentContactId === m.contactId) renderMessage(m);
+    loadContacts();
+  });
+}
+const origLoadAccounts = loadAccounts;
+loadAccounts = async function() {
+  await origLoadAccounts();
+  accounts.forEach(a => subscribeAccountEvents(a.id));
+};
+
+// ---------- init ----------
+loadAccounts();
+loadContacts();
+</script>
+</body>
+</html>
