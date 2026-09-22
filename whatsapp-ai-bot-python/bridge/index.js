@@ -54,7 +54,7 @@ function wasJustSentByBot(accountId, jid, text) {
   return false;
 }
 
-const PYTHON_WEBHOOK_URL = process.env.PYTHON_WEBHOOK_URL || 'http://localhost:8000/webhook';
+const PYTHON_WEBHOOK_URL = process.env.PYTHON_WEBHOOK_URL;
 
 const app = express();
 app.use(express.json());
