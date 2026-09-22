@@ -27,7 +27,7 @@ const {
 } = require('@whiskeysockets/baileys');
 
 const AUTH_DIR = path.join(__dirname, 'auth_sessions');
-const BRIDGE_PORT = process.env.BRIDGE_PORT || 4000;
+const BRIDGE_PORT = process.env.PORT || process.env.BRIDGE_PORT || 4000;
 
 // When Python sends a message through /send, WhatsApp echoes it straight
 // back through messages.upsert with fromMe:true — same as a human typing
